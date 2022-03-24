@@ -20,8 +20,8 @@ model.code <- nimbleCode({
       
       # error in variables for temp and rh
       # observed ~ N(true, error)
-      temp.o[s, t] ~ dnorm(temp[s, t], tau = tau.temp[s, t])
-      rh.o[s, t] ~ dnorm(rh[s, t], tau = tau.rh[s, t])
+      temp.o[s, t] ~ dnorm(temp[s, t], var = temp.var[s, t])
+      rh.o[s, t] ~ dnorm(rh[s, t], var = rh.var[s, t])
       
       # priors for true weather, which has been centered and scaled
       temp[s, t] ~ dnorm(0, tau = 1)
@@ -33,7 +33,7 @@ model.code <- nimbleCode({
         beta[s, 3] * rh[s, t]
       
       ex[s, t] <- x[s, t] * lambda[s, t]
-      x[s, t] ~ dnorm(ex[s, t], tau = tau.proc[s])
+      x[s, t+1] ~ dnorm(ex[s, t], tau = tau.proc[s])
     }  
     
     # data model
