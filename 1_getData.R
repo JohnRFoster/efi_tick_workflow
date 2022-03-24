@@ -162,18 +162,18 @@ temp <- bind_rows(air.temp.past, air.temp.future) %>%
 rh <- bind_rows(rh.past, rh.future) %>% 
   scale_center()
 
+# need all sundays in calibration and forecast period
+# fx.time set in forecast_workflow.R
+all.time <- c(time, fx.time)
+
 # before we can put the temp and rh matrices into data,
 # we need to make sure that all weeks in the tick data are 
 # in the weather data (in case any weather weeks are missing)
 # make a tibble that has every week for every site
 all.site.weeks <- expand_grid(
   siteID = site,
-  time = time
+  time = all.time
 )
-
-# need all sundays in calibration and forecast period
-# fx.time set in forecast_workflow.R
-all.time <- c(time, fx.time)
 
 #' @param df is our combined weather data, either temp or rh
 #' @param stat is the statistic to grab, either "mean" or "variance"
@@ -188,13 +188,18 @@ make_matrix <- function(df, stat){
                 values_from = .data[[stat]]) %>% 
     arrange(siteID) %>% 
     select(-siteID) %>% 
-    as.matrix
+    as.matrix()
+
 }
 
 temp.mean <- make_matrix(temp, "mean")
 temp.var <- make_matrix(temp, "variance")
 rh.mean <- make_matrix(rh, "mean")
 rh.var <- make_matrix(rh, "variance")
+
+# to be conservative, if the variance term is NA fill in with the maximum variance observed
+temp.var[is.na(temp.var)] <- max(temp.var, na.rm = TRUE)
+rh.var[is.na(rh.var)] <- max(rh.var, na.rm = TRUE)
 
 # place observed weather and associated error into data
 data$temp.o <- temp.mean
