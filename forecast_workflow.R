@@ -15,7 +15,7 @@ library(nimble)
 #           0. forecast identifiers
 # ========================================================== #
 
-team_name <- "tbd"
+team_name <- "state_space"
 check.neon <- FALSE # do we want to check neon for new (or updated) weather observations?
 
 team_list <- list(
@@ -56,19 +56,65 @@ source("1_getData.R")
 source("2_stateSpaceModel.R")
 
 # need to give an initial condition for model parameters
-# dimensions of parameters in inits must match dimensions in the model!
+# we can provide inits for any stochastic node, data or parameters
+# we have NAs in y, temp, and rh, so let's specify those
+# dimensions of inits must match dimensions in the model!
+
+
+# temperature and relative humidity have been centered and scaled, their inits are straightforward
+temp.init <- data$temp.o
+temp.o.na <- which(is.na(temp.init))
+temp.init[temp.o.na] <- rnorm(length(temp.o.na), 0, 1)
+
+rh.init <- data$rh.o
+rh.o.na <- which(is.na(rh.init))
+rh.init[rh.o.na] <- rnorm(length(rh.o.na), 0, 1)
+
+# for the observed nodes, we want inits where they are NA, and NA where there are data
+temp.o.init <- data$temp.o
+temp.o.init[temp.o.na] <- rnorm(length(temp.o.na), 0, 1)
+temp.o.init[-temp.o.na] <- NA
+
+rh.o.init <- data$rh.o
+rh.o.init[rh.o.na] <- rnorm(length(rh.o.na), 0, 1)
+rh.o.init[-rh.o.na] <- NA
+
+y.init <- data$y
+y.na <- which(is.na(y.init))
+y.init[y.na] <- rnorm(length(y.na), mean(y.init, na.rm = T), sd(y.init, na.rm = T))
+y.init[y.init < 0] <- 0 # density is zero-bound
+
+# these have the same dimensions and are closely related
+# best guess of the latent density is the data
+x.init <- y.init 
+y.init[-y.na] <- NA
+
+n.sites <- constants$n.sites
+n.drags <- constants$last.drag
 n.beta <- constants$n.sites*3
 inits <- function(){
   list(
-    beta = matrix(rnorm(n.beta, 0, 1), constants$n.sites, 3),
-    tau.proc ~ runif(constants$n.sites, 1, 3), 
-    tau.obs ~ runif(constants$n.sites, 1, 3)  
+    beta = matrix(rnorm(n.beta, 0, 1), n.sites, 3),
+    lambda = matrix(rnorm(n.sites*n.drags, 0, 1), n.sites, n.drags),
+    tau.proc = runif(constants$n.sites, 1, 3), 
+    tau.obs = runif(constants$n.sites, 1, 3),
+    y = jitter(y.init),
+    x = jitter(x.init),
+    ex = jitter(x.init[,-1]),
+    temp = jitter(temp.init),
+    rh = jitter(rh.init),
+    temp.o = jitter(temp.o.init),
+    rh.o = jitter(rh.o.init)
   )
 }
 
-myModel <- nimbleModel(
-  code = model.code, # model.code defined in 2_stateSpaceModel.R
+# model.code defined in 2_stateSpaceModel.R
+# constants and data from 1_getData.R
+model <- nimbleModel(
+  code = model.code, 
   constants = constants,
   data = data,
   inits = inits())
+
+model$initializeInfo()
 
