@@ -32,9 +32,9 @@ targets <- data.tick %>%
 # make it wide, where each row is a site and each column is a week
 nimble.data <- targets %>% 
   arrange(time) %>% 
-  select(time, siteID, `Amblyomma americanum`) %>% 
+  select(time, siteID, amblyomma_americanum) %>% 
   pivot_wider(names_from = time, 
-              values_from = `Amblyomma americanum`) %>% 
+              values_from = amblyomma_americanum) %>% 
   arrange(siteID)
 
 # what we actually use in nimble is a matrix with only numeric and NA values
@@ -45,17 +45,20 @@ y <- nimble.data %>%
 # need to pad the end of the matrix with NAs to represent the forecast period
 # n.fx.weeks set in forecast_workflow.R
 fx.na <- matrix(NA, nrow(y), n.fx.weeks)
+colnames(fx.na) <- as.character(fx.time)
 data$y <- cbind(y, fx.na) # put into our data list
 
 # some useful vectors that we may need later
 site <- nimble.data$siteID
-time <- ymd(colnames(y))
+time <- ymd(colnames(data$y))
 year <- year(time)
+month <- month(time)
 week <- MMWRweek(time)$MMWRweek
 
-# we need to index year, as each year is being modeled as its own cohort, place in constants
-year.index <- year %>% as.factor() %>% as.numeric()
-constants$year <- year.index
+# we need to index month
+month.index <- month %>% as.factor() %>% as.numeric()
+constants$month <- month.index
+constants$n.months <- max(month.index)
 
 # also need to index sites in the model code, place in constants
 site.index <- site %>% as.factor() %>% as.numeric()
@@ -162,9 +165,6 @@ temp <- bind_rows(air.temp.past, air.temp.future) %>%
 rh <- bind_rows(rh.past, rh.future) %>% 
   scale_center()
 
-# need all sundays in calibration and forecast period
-# fx.time set in forecast_workflow.R
-all.time <- c(time, fx.time)
 
 # before we can put the temp and rh matrices into data,
 # we need to make sure that all weeks in the tick data are 
@@ -172,7 +172,7 @@ all.time <- c(time, fx.time)
 # make a tibble that has every week for every site
 all.site.weeks <- expand_grid(
   siteID = site,
-  time = all.time
+  time = time
 )
 
 #' @param df is our combined weather data, either temp or rh
@@ -181,7 +181,7 @@ make_matrix <- function(df, stat){
   df.mmwr <- all.site.weeks %>% 
     left_join(df, by = c("siteID", "time")) %>% 
     create_mmwr() %>% 
-    filter(time %in% all.time) %>% 
+    filter(time %in% time) %>% 
     select(siteID, time, all_of(stat)) %>% 
     arrange(time) %>% 
     pivot_wider(names_from = time,
@@ -206,3 +206,5 @@ data$temp.o <- temp.mean
 data$temp.var <- temp.var
 data$rh.o <- rh.mean
 data$rh.var <- rh.var
+
+
